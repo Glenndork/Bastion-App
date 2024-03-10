@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:bastion/pages/home.dart';
+import 'package:bastion/pages/Signup.dart';
 class LandingPage extends StatelessWidget {
   const LandingPage({super.key});
 
@@ -26,7 +26,7 @@ class LandingPage extends StatelessWidget {
                   onPressed: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (context) => home()),
+                      MaterialPageRoute(builder: (context) => Signup()),
                     );
                 },
               ),
