@@ -1,4 +1,4 @@
-# bastion
+# Bastion
 
 A new Flutter project.
 
