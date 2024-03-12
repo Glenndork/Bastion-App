@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-
+import 'dart:async';
 class HomePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -12,8 +12,30 @@ class HomePage extends StatelessWidget {
   }
 }
 
-class ThreeColumnsRow extends StatelessWidget {
+class ThreeColumnsRow extends StatefulWidget {
   @override
+  _ThreeColumnsRowState createState() => _ThreeColumnsRowState();
+}
+
+class _ThreeColumnsRowState extends State<ThreeColumnsRow> {
+  IconData iconData = Icons.check;
+  Color iconColor = Colors.green;
+  String statusText = 'This computer is protected';
+  String buttonText = 'DISABLE';
+  Color buttonColor = Colors.red;
+  bool isScanRunning = false;
+  String elapsedTime = '00:00:00';
+  late Timer scanTimer; // Declare the Timer variable
+  int elapsedSeconds = 0;
+  int detectedMalwares = 0;
+
+  @override
+  void dispose() {
+    // Dispose the timer when the widget is disposed
+    scanTimer.cancel();
+    super.dispose();
+  }
+
   Widget build(BuildContext context) {
     return Row(
       children: [
@@ -27,18 +49,18 @@ class ThreeColumnsRow extends StatelessWidget {
                   alignment: Alignment.topLeft,
                   child: Image.asset(
                     'assets/logo/noname.png',
-                    width: 150,
-                    height: 150,
+                    width: 100,
+                    height: 100,
                   ),
                 ),
                 const Positioned(
-                  top: 55, // Half of the image height to center the text vertically relative to the image
-                  left: 150 + 15, // Image width + desired space between the image and the text
+                  top: 30,
+                  left: 100 + 5,
                   child: Text(
                     'BASTION',
                     style: TextStyle(
                       fontFamily: 'Black Ops One',
-                      fontSize: 30,
+                      fontSize: 25,
                       color: Colors.white,
                     ),
                   ),
@@ -47,7 +69,6 @@ class ThreeColumnsRow extends StatelessWidget {
             ),
           ),
         ),
-
         Expanded(
           child: Container(
             height: double.infinity,
@@ -56,87 +77,154 @@ class ThreeColumnsRow extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
-                    width: 350, // Adjust the size of the circle
-                    height: 350, // Adjust the size of the circle
+                    width: 350,
+                    height: 350,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       border: Border.all(
                         color: Colors.white,
-                        width: 2, // Adjust the width of the circle border
+                        width: 2,
                       ),
                     ),
-                    child: const Center(
+                    child: Center(
                       child: Icon(
-                        Icons.check,
-                        color: Colors.green,
-                        size: 300, // Adjust the size of the checkmark
+                        iconData,
+                        color: iconColor,
+                        size: 300,
                       ),
                     ),
                   ),
-                  const SizedBox(height: 10), // Adjust the spacing between the checkmark and the text
-                  const Text(
-                    'This computer is protected',
-                    style: TextStyle(
-                      fontSize: 30, // Adjust the font size of the text
-                      color: Colors.white, // Adjust the color of the text
-                    ),
-                  ),
-                  const Text(
-                    'You are up-to-date! Last scanned today at 6:09 PM',
-                    style: TextStyle(
-                      fontSize: 18, // Adjust the font size of the text
-                      color: Colors.white, // Adjust the color of the text
-                    ),
-                  ),
-                  const SizedBox(height: 20), // Add spacing between the text and buttons
+                  const SizedBox(height: 10),
+                  isScanRunning
+                      ? Text(
+                          'Scanning...',
+                          style: const TextStyle(
+                            fontSize: 30,
+                            color: Colors.white,
+                          ),
+                        )
+                      : Text(
+                          statusText,
+                          style: const TextStyle(
+                            fontSize: 30,
+                            color: Colors.white,
+                          ),
+                        ),
+                  const SizedBox(height: 10),
+                  isScanRunning
+                      ? Text(
+                          'Elapsed Time: $elapsedTime',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text(
+                          'You are up-to-date! Last scanned today at 6:09 PM',
+                          style: TextStyle(
+                            fontSize: 18,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Visibility(
+                          visible: isScanRunning,
+                          child: Text(
+                            'Detected Malwares: $detectedMalwares',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                  const SizedBox(height: 20),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    mainAxisAlignment: isScanRunning ? MainAxisAlignment.center : MainAxisAlignment.spaceEvenly,
                     children: [
-                      ElevatedButton(
-                        onPressed: () {
-                          // Add your logic for the "Disable" button
-                        },
-                        style: ButtonStyle(
-                          backgroundColor: MaterialStateProperty.all<Color>(Colors.red), // Set the red color
-                          shape: MaterialStateProperty.all<RoundedRectangleBorder>(
-                            RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10), // Set the border radius
+                      Visibility(
+                        visible: !isScanRunning,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            setState(() {
+                              if (buttonText == 'DISABLE') {
+                                iconData = Icons.clear;
+                                iconColor = Colors.red;
+                                statusText = 'This computer is not protected';
+                                buttonText = 'ENABLE';
+                                buttonColor = Colors.green;
+                              } else {
+                                iconData = Icons.check;
+                                iconColor = Colors.green;
+                                statusText = 'This computer is protected';
+                                buttonText = 'DISABLE';
+                                buttonColor = Colors.red;
+                              }
+                            });
+                          },
+                          style: ButtonStyle(
+                            backgroundColor: MaterialStateProperty.all<Color>(buttonColor),
+                            shape: MaterialStateProperty.all<RoundedRectangleBorder>(
+                              RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                            minimumSize: MaterialStateProperty.all<Size>(
+                              const Size(170, 65),
                             ),
                           ),
-                          minimumSize: MaterialStateProperty.all<Size>(
-                            Size(170, 65), // Set the width and height of the button
+                          child: Text(
+                            buttonText,
+                            style: const TextStyle(
+                              color: Colors.black,
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
-                        child: const Text(
-                          'DISABLE',
-                          style: TextStyle(
-                            color: Colors.black,
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold
-                          ),
-                          ),
                       ),
                       ElevatedButton(
-                        onPressed: () {
-                          // Add your logic for the "Run Scan" button
-                        },
+                        onPressed: isScanRunning
+                            ? () {
+                                // Add your logic for stopping the scan
+                                setState(() {
+                                  isScanRunning = false;
+                                  iconData = Icons.check;
+                                  buttonText = 'DISABLE';
+                                  buttonColor = Colors.red;
+                                  iconColor = Colors.green;
+                                  scanTimer.cancel();
+                                  elapsedSeconds = 0;
+                                  detectedMalwares = 0;
+                                });
+                              }
+                            : () {
+                                // Add your logic for starting the scan
+                                setState(() {
+                                  isScanRunning = true;
+                                  iconData = Icons.search;
+                                  iconColor = Colors.grey;
+                                  buttonText = 'STOP';
+                                  buttonColor = Colors.grey;
+                                  startScan();
+                                });
+                              },
                         style: ButtonStyle(
-                          backgroundColor: MaterialStateProperty.all<Color>(Colors.green), // Set the green color
+                          backgroundColor: MaterialStateProperty.all<Color>(Colors.green),
                           shape: MaterialStateProperty.all<RoundedRectangleBorder>(
                             RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10), // Set the border radius
+                              borderRadius: BorderRadius.circular(10),
                             ),
                           ),
                           minimumSize: MaterialStateProperty.all<Size>(
-                            Size(170, 65), // Set the width and height of the button
+                            const Size(170, 65),
                           ),
                         ),
-                        child: const Text(
-                          'RUN SCAN',
-                          style: TextStyle(
+                        child: Text(
+                          isScanRunning ? 'STOP' : 'RUN SCAN',
+                          style: const TextStyle(
                             color: Colors.black,
                             fontSize: 24,
-                            fontWeight: FontWeight.bold
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
                       ),
@@ -157,13 +245,13 @@ class ThreeColumnsRow extends StatelessWidget {
                   padding: const EdgeInsets.all(15),
                   child: IconButton(
                     icon: const Icon(
-                      Icons.settings, 
+                      Icons.settings,
                       size: 40,
-                      ),
+                    ),
                     onPressed: () {
                       // Add your logic for the settings icon
                     },
-                    color: Colors.white, // Adjust the color of the settings icon
+                    color: Colors.white,
                   ),
                 ),
               ],
@@ -172,5 +260,14 @@ class ThreeColumnsRow extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  void startScan() {
+    const oneSec = Duration(seconds: 1);
+    scanTimer = Timer.periodic(oneSec, (Timer timer) {
+      setState(() {
+        elapsedTime = Duration(seconds: timer.tick).toString().split('.').first;
+      });
+    });
   }
 }

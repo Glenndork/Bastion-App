@@ -9,7 +9,7 @@ class Signup extends StatefulWidget {
 class _SignupState extends State<Signup> {
   TextEditingController nameController = TextEditingController();
   TextEditingController phoneNumberController = TextEditingController();
-
+  
   String nameError = ''; // Initialize with an empty string
   String phoneNumberError = ''; // Initialize with an empty string
 

@@ -22,14 +22,22 @@ class LandingPage extends StatelessWidget {
               ), // Add some spacing
               
               ElevatedButton(
-                child: Text('Continue'),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => Signup()),
-                    );
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => Signup()),
+                  );
                 },
+                style: ButtonStyle(
+                  minimumSize: MaterialStateProperty.all<Size>(Size(150, 50)), // Set the width and height of the button
+                  foregroundColor: MaterialStateProperty.all<Color>(Colors.black), // Set the text color to black
+                ),
+                child: const Text(
+                  'Continue',
+                  style: TextStyle(fontSize: 18), // Adjust the font size
+                ),
               ),
+
             ],
           ),
         ),
