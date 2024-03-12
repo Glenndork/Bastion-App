@@ -16,7 +16,7 @@ class _SignupState extends State<Signup> {
   bool isValidPhoneNumber(String phoneNumber) {
     // Add your phone number validation logic here
     // For simplicity, this example checks if the number starts with '+63'
-    return phoneNumber.startsWith('+63');
+    return phoneNumber.startsWith('+63') && phoneNumber.length == 13;
   }
 
   @override
@@ -38,7 +38,7 @@ class _SignupState extends State<Signup> {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Image.asset(
-                  'assets/Logo/bastionwhite.png', // Replace with your logo asset path
+                  'assets/Logo/bastionblack.png', // Replace with your logo asset path
                   height: 250,
                   width: 250,
                 ),
@@ -48,16 +48,13 @@ class _SignupState extends State<Signup> {
                   decoration: InputDecoration(
                     hintText: 'Enter your name',
                     errorText: nameError,
-                    focusedBorder: const UnderlineInputBorder(
-                      borderSide: BorderSide(color: Colors.grey),
-                    ),
                   ),
                 ),
                 const SizedBox(height: 10),
                 TextField(
                   controller: phoneNumberController,
                   decoration: InputDecoration(
-                    hintText: 'Enter your phone number',
+                    hintText: 'Enter your phone number (+63)',
                     errorText: phoneNumberError,
                   ),
                 ),
@@ -65,40 +62,44 @@ class _SignupState extends State<Signup> {
                 ElevatedButton(
                   onPressed: () {
                     // Validate name and phone number before proceeding
-                    // setState(() {
-                    //   nameError = '';
-                    //   phoneNumberError = '';
+                    setState(() {
+                      nameError = '';
+                      phoneNumberError = '';
 
-                    //   if (nameController.text.isEmpty) {
-                    //     nameError = 'Name is required';
-                    //   }
+                      if (nameController.text.isEmpty) {
+                        nameError = 'Name is required';
+                      }
 
-                    //   if (phoneNumberController.text.isEmpty || !isValidPhoneNumber(phoneNumberController.text)) {
-                    //     phoneNumberError = 'Enter a valid Philippine phone number (starting with +63)';
-                    //   }
+                      if (phoneNumberController.text.isEmpty) {
+                        phoneNumberError = 'Phone number is required';
+                      } else if (!isValidPhoneNumber(phoneNumberController.text)) {
+                        phoneNumberError = 'Phone number must start with +63';
+                      }
 
-                    //   // Proceed only if there are no errors
-                    //   if (nameError.isEmpty && phoneNumberError.isEmpty) {
-                    //     // Add your logic for the continue button
-                    //     // For example, you can navigate to the next screen (Homepage)
-                    //     Navigator.push(
-                    //       context,
-                    //       MaterialPageRoute(builder: (context) => HomePage()),
-                    //     );
-                    //   }
-                    // });
-
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => HomePage()),
-                    );
-
+                      // Proceed only if there are no errors
+                      if (nameError.isEmpty && phoneNumberError.isEmpty) {
+                        // Add your logic for the continue button
+                        // For example, you can navigate to the next screen (Homepage)
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => HomePage()),
+                        );
+                      }
+                    });
                   },
                   style: ButtonStyle(
                     backgroundColor: MaterialStateProperty.all<Color>(Colors.grey[800]!),
                     foregroundColor: MaterialStateProperty.all<Color>(Colors.white),
+                    minimumSize: MaterialStateProperty.all<Size>(
+                        const Size(170, 50),
+                      ),
                   ),
-                  child: const Text('Continue'),
+                  child: const Text(
+                    'Create Account',
+                    style: TextStyle(
+                      fontSize: 18,
+                    ),
+                    ),
                 ),
               ],
             ),
