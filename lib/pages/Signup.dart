@@ -22,12 +22,15 @@ class _SignupState extends State<Signup> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey,
+      backgroundColor: Color.fromARGB(98, 90, 86, 86),
       body: Center(
         child: Container(
-          width: 250,
-          height: 500,
-          color: Colors.grey,
+          width: 350,
+          height: 550,
+          decoration: BoxDecoration(
+            color: const Color.fromARGB(255, 216, 212, 212),
+            borderRadius: BorderRadius.circular(20), // Add border radius here
+          ),
           child: Padding(
             padding: const EdgeInsets.all(16.0),
             child: Column(
