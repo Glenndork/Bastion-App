@@ -249,7 +249,24 @@ class _ThreeColumnsRowState extends State<ThreeColumnsRow> {
                       size: 40,
                     ),
                     onPressed: () {
-                      // Add your logic for the settings icon
+                      showDialog(
+                        context: context,
+                        builder: (BuildContext context) {
+                          return AlertDialog(
+                            title: Text("Settings"),
+                            content: Text("XD"),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 50.0, vertical: 150.0), // Adjust the padding as needed
+                            actions: <Widget>[
+                              TextButton(
+                                onPressed: () {
+                                  Navigator.of(context).pop();
+                                },
+                                child: Text("Close"),
+                              ),
+                            ],
+                          );
+                        },
+                      );
                     },
                     color: Colors.white,
                   ),
