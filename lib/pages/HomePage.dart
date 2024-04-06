@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import 'dart:async';
+import 'dart:io';
+
 class HomePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -25,17 +28,26 @@ class _ThreeColumnsRowState extends State<ThreeColumnsRow> {
   Color buttonColor = Colors.red;
   bool isScanRunning = false;
   String elapsedTime = '00:00:00';
-  late Timer scanTimer; // Declare the Timer variable
-  int elapsedSeconds = 0;
+  late Timer scanTimer;
+  int elapsedSeconds = 0; // Define elapsedSeconds here
+  late StreamSubscription<FileSystemEntity> scanSubscription; // Add subscription for scanning
   int detectedMalwares = 0;
+  String? directoryPath;
 
   @override
   void dispose() {
-    // Dispose the timer when the widget is disposed
     scanTimer.cancel();
+    scanSubscription.cancel(); // Cancel subscription when disposing
     super.dispose();
   }
 
+   @override
+  void initState() {
+    super.initState();
+    elapsedSeconds = 0; // Initialize elapsedSeconds in initState
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Row(
       children: [
@@ -96,9 +108,9 @@ class _ThreeColumnsRowState extends State<ThreeColumnsRow> {
                   ),
                   const SizedBox(height: 10),
                   isScanRunning
-                      ? Text(
-                          'Scanning...',
-                          style: const TextStyle(
+                      ? const Text(
+                          'Scanning: ',
+                          style: TextStyle(
                             fontSize: 30,
                             color: Colors.white,
                           ),
@@ -126,20 +138,21 @@ class _ThreeColumnsRowState extends State<ThreeColumnsRow> {
                             color: Colors.white,
                           ),
                         ),
-                        const SizedBox(height: 10),
-                        Visibility(
-                          visible: isScanRunning,
-                          child: Text(
-                            'Detected Malwares: $detectedMalwares',
-                            style: const TextStyle(
-                              fontSize: 18,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
+                  const SizedBox(height: 10),
+                  Visibility(
+                    visible: isScanRunning,
+                    child: Text(
+                      'Detected Malwares: $detectedMalwares',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 20),
                   Row(
-                    mainAxisAlignment: isScanRunning ? MainAxisAlignment.center : MainAxisAlignment.spaceEvenly,
+                    mainAxisAlignment:
+                        isScanRunning ? MainAxisAlignment.center : MainAxisAlignment.spaceEvenly,
                     children: [
                       Visibility(
                         visible: !isScanRunning,
@@ -183,31 +196,7 @@ class _ThreeColumnsRowState extends State<ThreeColumnsRow> {
                         ),
                       ),
                       ElevatedButton(
-                        onPressed: isScanRunning
-                            ? () {
-                                // Add your logic for stopping the scan
-                                setState(() {
-                                  isScanRunning = false;
-                                  iconData = Icons.check;
-                                  buttonText = 'DISABLE';
-                                  buttonColor = Colors.red;
-                                  iconColor = Colors.green;
-                                  scanTimer.cancel();
-                                  elapsedSeconds = 0;
-                                  detectedMalwares = 0;
-                                });
-                              }
-                            : () {
-                                // Add your logic for starting the scan
-                                setState(() {
-                                  isScanRunning = true;
-                                  iconData = Icons.search;
-                                  iconColor = Colors.grey;
-                                  buttonText = 'STOP';
-                                  buttonColor = Colors.grey;
-                                  startScan();
-                                });
-                              },
+                        onPressed: handleScanButtonPressed,
                         style: ButtonStyle(
                           backgroundColor: MaterialStateProperty.all<Color>(Colors.green),
                           shape: MaterialStateProperty.all<RoundedRectangleBorder>(
@@ -255,7 +244,7 @@ class _ThreeColumnsRowState extends State<ThreeColumnsRow> {
                           return AlertDialog(
                             title: Text("Settings"),
                             content: Text("XD"),
-                            contentPadding: EdgeInsets.symmetric(horizontal: 50.0, vertical: 150.0), // Adjust the padding as needed
+                            contentPadding: EdgeInsets.symmetric(horizontal: 50.0, vertical: 150.0),
                             actions: <Widget>[
                               TextButton(
                                 onPressed: () {
@@ -279,12 +268,107 @@ class _ThreeColumnsRowState extends State<ThreeColumnsRow> {
     );
   }
 
-  void startScan() {
+  Future<void> _scanFilesAndChangeIcons(String directoryPath) async {
+    final directory = Directory(directoryPath);
+
+    if (!directory.existsSync()) {
+      print('Directory does not exist: $directoryPath');
+      return;
+    }
+
+    scanSubscription = directory.list(recursive: true).listen((entity) async {
+      if (entity is File) {
+        // Update UI to indicate scanning
+        setState(() {
+          iconData = Icons.search;
+          iconColor = Colors.grey;
+        });
+
+        // Perform scanning logic
+        print('Scanning File: ${entity.path}');
+        print('File Type: ${entity.path.split('.').last}');
+
+        // Simulate scanning delay
+        await Future.delayed(Duration(milliseconds: 500)); // Adjust delay as needed
+      }
+    }, onDone: () {
+      // Scan completed
+      setState(() {
+        isScanRunning = false;
+        iconData = Icons.check;
+        buttonColor = Colors.red;
+        iconColor = Colors.green;
+      });
+    });
+
+    // Start timer to track elapsed time
     const oneSec = Duration(seconds: 1);
     scanTimer = Timer.periodic(oneSec, (Timer timer) {
       setState(() {
-        elapsedTime = Duration(seconds: timer.tick).toString().split('.').first;
+        final duration = Duration(seconds: timer.tick);
+        elapsedTime = '${duration.inHours}:${duration.inMinutes.remainder(60)}:${duration.inSeconds.remainder(60)}';
       });
     });
+  }
+
+  void startScan(String directoryPath) {
+    setState(() {
+      // Reset timer to zero when scanning starts
+      elapsedTime = '00:00:00';
+    });
+
+    // Start the timer
+    const oneSec = Duration(seconds: 1);
+    int elapsedSeconds = 0;
+
+    scanTimer = Timer.periodic(oneSec, (Timer timer) {
+      setState(() {
+        // Update elapsed time every second
+        elapsedSeconds++;
+        final hours = (elapsedSeconds / 3600).floor();
+        final minutes = ((elapsedSeconds % 3600) / 60).floor();
+        final seconds = (elapsedSeconds % 60);
+        elapsedTime = '$hours:${minutes < 10 ? '0$minutes' : minutes}:${seconds < 10 ? '0$seconds' : seconds}';
+      });
+    });
+
+    _scanFilesAndChangeIcons(directoryPath);
+  }
+
+  void stopScan() {
+    // Stop the scan subscription and cancel the timer
+    scanSubscription.cancel();
+    scanTimer.cancel();
+
+    // Update UI to reflect scan stopped
+    setState(() {
+      isScanRunning = false;
+      iconData = Icons.check;
+      buttonText = 'DISABLE';
+      buttonColor = Colors.red;
+      iconColor = Colors.green;
+    });
+  }
+
+  void handleScanButtonPressed() async {
+    if (isScanRunning) {
+      // User pressed stop button
+      stopScan();
+    } else {
+      // User pressed start button
+      directoryPath = await selectDirectory();
+
+      if (directoryPath != null) {
+        startScan(directoryPath!);
+      } else {
+        // User cancelled directory selection
+        print('Directory selection canceled.');
+      }
+    }
+  }
+
+  Future<String?> selectDirectory() async {
+    final result = await FilePicker.platform.getDirectoryPath();
+    return result;
   }
 }

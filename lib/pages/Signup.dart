@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'HomePage.dart'; // Import the file representing your homepage
 
+String? globalPhoneNumber;
 class Signup extends StatefulWidget {
   @override
   _SignupState createState() => _SignupState();
@@ -12,6 +13,7 @@ class _SignupState extends State<Signup> {
   
   String nameError = ''; // Initialize with an empty string
   String phoneNumberError = ''; // Initialize with an empty string
+
 
   bool isValidPhoneNumber(String phoneNumber) {
     // Add your phone number validation logic here
@@ -78,6 +80,9 @@ class _SignupState extends State<Signup> {
 
                       // Proceed only if there are no errors
                       if (nameError.isEmpty && phoneNumberError.isEmpty) {
+                        // Retrieve the phone number and print it in the console
+                        globalPhoneNumber = phoneNumberController.text;
+
                         // Add your logic for the continue button
                         // For example, you can navigate to the next screen (Homepage)
                         Navigator.push(
