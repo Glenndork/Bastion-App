@@ -31,8 +31,11 @@ dependencies:
   flutter:
     sdk: flutter
   file_picker: ^4.0.0
+  loading_animation_widget:
 
   cupertino_icons: ^1.0.6
+  http: ^1.2.1
+  shared_preferences: ^2.2.3
 
 dev_dependencies:
   flutter_test:

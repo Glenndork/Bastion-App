@@ -1,7 +1,11 @@
-import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
 import 'dart:async';
-import 'dart:io';
+import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:file_picker/file_picker.dart';
+import 'dart:io' show Directory, FileSystemCreateEvent, FileSystemEvent, Process;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http; // Import http package
 
 class HomePage extends StatelessWidget {
   @override
@@ -21,30 +25,170 @@ class ThreeColumnsRow extends StatefulWidget {
 }
 
 class _ThreeColumnsRowState extends State<ThreeColumnsRow> {
-  IconData iconData = Icons.check;
-  Color iconColor = Colors.green;
-  String statusText = 'This computer is protected';
-  String buttonText = 'DISABLE';
-  Color buttonColor = Colors.red;
-  bool isScanRunning = false;
-  String elapsedTime = '00:00:00';
-  late Timer scanTimer;
-  int elapsedSeconds = 0; // Define elapsedSeconds here
-  late StreamSubscription<FileSystemEntity> scanSubscription; // Add subscription for scanning
-  int detectedMalwares = 0;
-  String? directoryPath;
+  String? monitoredDirectory;
+  StreamSubscription<FileSystemEvent>? _monitorSubscription;
+  final TextEditingController phoneController = TextEditingController();
+  String phoneNumberError = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMonitoredDirectory(); // Load the monitored directory on initialization
+  }
 
   @override
   void dispose() {
-    scanTimer.cancel();
-    scanSubscription.cancel(); // Cancel subscription when disposing
+    _monitorSubscription?.cancel(); // Cancel subscription when disposing
     super.dispose();
   }
 
-   @override
-  void initState() {
-    super.initState();
-    elapsedSeconds = 0; // Initialize elapsedSeconds in initState
+  void _loadMonitoredDirectory() async {
+    final prefs = await SharedPreferences.getInstance();
+    monitoredDirectory = prefs.getString('monitoredDirectory'); // Retrieve the saved directory
+
+    if (monitoredDirectory != null) {
+      _startMonitoring(monitoredDirectory!); // Start monitoring if the directory is available
+    }
+  }
+
+  void _startMonitoring(String directoryPath) {
+    _monitorSubscription?.cancel(); // Cancel any existing subscription
+
+    final directory = Directory(directoryPath);
+    if (!directory.existsSync()) {
+      print('Directory does not exist: $directoryPath');
+      return;
+    }
+
+    _monitorSubscription = directory.watch(recursive: true).listen(
+      (FileSystemEvent event) {
+        if (event is FileSystemCreateEvent) {
+          print('New file detected: ${event.path}'); // Log the file detection
+          _scanFile(event.path); // Scan the new file
+        }
+      },
+      onError: (error) => print('Error monitoring directory: $error'),
+      onDone: () => print('Monitoring ended.'),
+    );
+  }
+
+  void _scanFile(String filePath) async {
+    final pythonScript = 'flask_api/script/app.py'; // Path to your Python script
+
+    try {
+      print('100');
+      final result = await Process.run('python3', [pythonScript, filePath]);
+
+      if (result.exitCode == 0) {
+        print('200');
+
+        final output = result.stdout.toString().trim(); // Get script output
+
+        print('File scanned successfully: $output');
+
+        if (output == "Malware") {
+          // Send SMS if malware is detected
+          final message = "Malware detected in file: $filePath"; // SMS content
+          _sendSmsNotification(message); // Trigger SMS
+        }
+      } else {
+        print('File scan failed: ${result.stderr}'); // Handle failure
+      }
+    } catch (e) {
+      print('Error scanning file: $e'); // Handle exceptions
+    }
+  }
+
+  Future<void> _sendSmsNotification(String message) async {
+    print('300');
+    final apiKey = "41b35041";
+    final apiSecret = "8KleUiYbk2S77WUp";
+    final from = "Bastion"; // Sender name or number
+    final to = phoneController.text; // Recipient's phone number
+
+    final response = await http.post(
+      Uri.parse("https://rest.nexmo.com/sms/json"),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        "api_key": apiKey,
+        "api_secret": apiSecret,
+        "from": from,
+        "to": to,
+        "text": message,
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      print('400');
+      final responseData = jsonDecode(response.body);
+      final messageStatus = responseData["messages"][0]["status"];
+
+      if (messageStatus == "0") {
+        print("SMS sent successfully");
+      } else {
+        print("Failed to send SMS: ${responseData['messages'][0]['error-text']}");
+      }
+    } else {
+      print("Failed to send SMS. Status code: ${response.statusCode}");
+    }
+  }
+
+  void _showSettingsDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text("Configure Phone Number"),
+          content: Container(
+            width: 300,
+            height: 150,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Enter Phone Number',
+                  style: TextStyle(fontSize: 15),
+                ),
+                
+                TextField(
+                  controller: phoneController,
+                  decoration: InputDecoration(
+                    hintText: '63',
+                    errorText: phoneNumberError.isEmpty ? null : phoneNumberError,
+                  ),
+                  keyboardType: TextInputType.phone,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'^[+0-9]*$')),
+                  ],
+                  onChanged: (value) {
+                    if (value.length == 12) {
+                      phoneNumberError = '';
+                    } else {
+                      phoneNumberError = 'Phone number must start with 63 and be 12 characters long.';
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () {
+                if (phoneController.text.length == 12) {
+                  Navigator.of(context).pop(); // Close the dialog
+                  print(phoneController.text);
+                } else {
+                  print("Invalid phone number");
+                }
+              },
+              child: const Text("Save"),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -53,7 +197,6 @@ class _ThreeColumnsRowState extends State<ThreeColumnsRow> {
       children: [
         Expanded(
           child: Container(
-            height: double.infinity,
             padding: const EdgeInsets.all(15),
             child: Stack(
               children: [
@@ -67,7 +210,7 @@ class _ThreeColumnsRowState extends State<ThreeColumnsRow> {
                 ),
                 const Positioned(
                   top: 30,
-                  left: 100 + 5,
+                  left: 105,
                   child: Text(
                     'BASTION',
                     style: TextStyle(
@@ -83,184 +226,38 @@ class _ThreeColumnsRowState extends State<ThreeColumnsRow> {
         ),
         Expanded(
           child: Container(
-            height: double.infinity,
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 350,
-                    height: 350,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: Colors.white,
-                        width: 2,
-                      ),
-                    ),
-                    child: Center(
-                      child: Icon(
-                        iconData,
-                        color: iconColor,
-                        size: 300,
-                      ),
-                    ),
+            child: ElevatedButton(
+              onPressed: _selectDirectory, // Select a folder to monitor
+              style: ButtonStyle(
+                backgroundColor: MaterialStateProperty.all<Color>(Colors.green),
+                shape: MaterialStateProperty.all<RoundedRectangleBorder>(
+                  RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  const SizedBox(height: 10),
-                  isScanRunning
-                      ? const Text(
-                          'Scanning: ',
-                          style: TextStyle(
-                            fontSize: 30,
-                            color: Colors.white,
-                          ),
-                        )
-                      : Text(
-                          statusText,
-                          style: const TextStyle(
-                            fontSize: 30,
-                            color: Colors.white,
-                          ),
-                        ),
-                  const SizedBox(height: 10),
-                  isScanRunning
-                      ? Text(
-                          'Elapsed Time: $elapsedTime',
-                          style: const TextStyle(
-                            fontSize: 18,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Text(
-                          'You are up-to-date! Last scanned today at 6:09 PM',
-                          style: TextStyle(
-                            fontSize: 18,
-                            color: Colors.white,
-                          ),
-                        ),
-                  const SizedBox(height: 10),
-                  Visibility(
-                    visible: isScanRunning,
-                    child: Text(
-                      'Detected Malwares: $detectedMalwares',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Row(
-                    mainAxisAlignment:
-                        isScanRunning ? MainAxisAlignment.center : MainAxisAlignment.spaceEvenly,
-                    children: [
-                      Visibility(
-                        visible: !isScanRunning,
-                        child: ElevatedButton(
-                          onPressed: () {
-                            setState(() {
-                              if (buttonText == 'DISABLE') {
-                                iconData = Icons.clear;
-                                iconColor = Colors.red;
-                                statusText = 'This computer is not protected';
-                                buttonText = 'ENABLE';
-                                buttonColor = Colors.green;
-                              } else {
-                                iconData = Icons.check;
-                                iconColor = Colors.green;
-                                statusText = 'This computer is protected';
-                                buttonText = 'DISABLE';
-                                buttonColor = Colors.red;
-                              }
-                            });
-                          },
-                          style: ButtonStyle(
-                            backgroundColor: MaterialStateProperty.all<Color>(buttonColor),
-                            shape: MaterialStateProperty.all<RoundedRectangleBorder>(
-                              RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                            ),
-                            minimumSize: MaterialStateProperty.all<Size>(
-                              const Size(170, 65),
-                            ),
-                          ),
-                          child: Text(
-                            buttonText,
-                            style: const TextStyle(
-                              color: Colors.black,
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ),
-                      ElevatedButton(
-                        onPressed: handleScanButtonPressed,
-                        style: ButtonStyle(
-                          backgroundColor: MaterialStateProperty.all<Color>(Colors.green),
-                          shape: MaterialStateProperty.all<RoundedRectangleBorder>(
-                            RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                          minimumSize: MaterialStateProperty.all<Size>(
-                            const Size(170, 65),
-                          ),
-                        ),
-                        child: Text(
-                          isScanRunning ? 'STOP' : 'RUN SCAN',
-                          style: const TextStyle(
-                            color: Colors.black,
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+                ),
+                minimumSize: MaterialStateProperty.all<Size>(const Size(170, 65)),
+              ),
+              child: const Text(
+                'Select Folder',
+                style: TextStyle(
+                  color: Colors.black,
+                  fontSize: 24,
+                  fontWeight: FontWeight.normal,
+                ),
               ),
             ),
           ),
         ),
         Expanded(
           child: Container(
-            height: double.infinity,
-            child: Stack(
-              alignment: Alignment.topRight,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(15),
-                  child: IconButton(
-                    icon: const Icon(
-                      Icons.settings,
-                      size: 40,
-                    ),
-                    onPressed: () {
-                      showDialog(
-                        context: context,
-                        builder: (BuildContext context) {
-                          return AlertDialog(
-                            title: Text("Settings"),
-                            content: Text("XD"),
-                            contentPadding: EdgeInsets.symmetric(horizontal: 50.0, vertical: 150.0),
-                            actions: <Widget>[
-                              TextButton(
-                                onPressed: () {
-                                  Navigator.of(context).pop();
-                                },
-                                child: Text("Close"),
-                              ),
-                            ],
-                          );
-                        },
-                      );
-                    },
-                    color: Colors.white,
-                  ),
-                ),
-              ],
+            alignment: Alignment.topRight,
+            child: IconButton(
+              icon: const Icon(
+                Icons.settings,
+                size: 40,
+              ),
+              onPressed: () => _showSettingsDialog(context), // Show the settings dialog
+              color: Colors.white,
             ),
           ),
         ),
@@ -268,107 +265,19 @@ class _ThreeColumnsRowState extends State<ThreeColumnsRow> {
     );
   }
 
-  Future<void> _scanFilesAndChangeIcons(String directoryPath) async {
-    final directory = Directory(directoryPath);
-
-    if (!directory.existsSync()) {
-      print('Directory does not exist: $directoryPath');
-      return;
-    }
-
-    scanSubscription = directory.list(recursive: true).listen((entity) async {
-      if (entity is File) {
-        // Update UI to indicate scanning
-        setState(() {
-          iconData = Icons.search;
-          iconColor = Colors.grey;
-        });
-
-        // Perform scanning logic
-        print('Scanning File: ${entity.path}');
-        print('File Type: ${entity.path.split('.').last}');
-
-        // Simulate scanning delay
-        await Future.delayed(Duration(milliseconds: 500)); // Adjust delay as needed
-      }
-    }, onDone: () {
-      // Scan completed
+  Future<void> _selectDirectory() async {
+    final selectedPath = await FilePicker.platform.getDirectoryPath();
+    if (selectedPath != null) {
       setState(() {
-        isScanRunning = false;
-        iconData = Icons.check;
-        buttonColor = Colors.red;
-        iconColor = Colors.green;
+        monitoredDirectory = selectedPath;
+        print('Selected Directory: $selectedPath');
+
       });
-    });
-
-    // Start timer to track elapsed time
-    const oneSec = Duration(seconds: 1);
-    scanTimer = Timer.periodic(oneSec, (Timer timer) {
-      setState(() {
-        final duration = Duration(seconds: timer.tick);
-        elapsedTime = '${duration.inHours}:${duration.inMinutes.remainder(60)}:${duration.inSeconds.remainder(60)}';
-      });
-    });
-  }
-
-  void startScan(String directoryPath) {
-    setState(() {
-      // Reset timer to zero when scanning starts
-      elapsedTime = '00:00:00';
-    });
-
-    // Start the timer
-    const oneSec = Duration(seconds: 1);
-    int elapsedSeconds = 0;
-
-    scanTimer = Timer.periodic(oneSec, (Timer timer) {
-      setState(() {
-        // Update elapsed time every second
-        elapsedSeconds++;
-        final hours = (elapsedSeconds / 3600).floor();
-        final minutes = ((elapsedSeconds % 3600) / 60).floor();
-        final seconds = (elapsedSeconds % 60);
-        elapsedTime = '$hours:${minutes < 10 ? '0$minutes' : minutes}:${seconds < 10 ? '0$seconds' : seconds}';
-      });
-    });
-
-    _scanFilesAndChangeIcons(directoryPath);
-  }
-
-  void stopScan() {
-    // Stop the scan subscription and cancel the timer
-    scanSubscription.cancel();
-    scanTimer.cancel();
-
-    // Update UI to reflect scan stopped
-    setState(() {
-      isScanRunning = false;
-      iconData = Icons.check;
-      buttonText = 'DISABLE';
-      buttonColor = Colors.red;
-      iconColor = Colors.green;
-    });
-  }
-
-  void handleScanButtonPressed() async {
-    if (isScanRunning) {
-      // User pressed stop button
-      stopScan();
+      _startMonitoring(selectedPath); // Start monitoring the directory
     } else {
-      // User pressed start button
-      directoryPath = await selectDirectory();
-
-      if (directoryPath != null) {
-        startScan(directoryPath!);
-      } else {
-        // User cancelled directory selection
-        print('Directory selection canceled.');
-      }
+      print('Directory selection canceled.');
     }
-  }
-
-  Future<String?> selectDirectory() async {
-    final result = await FilePicker.platform.getDirectoryPath();
-    return result;
   }
 }
+
+void main() => runApp(MaterialApp(home: HomePage()));
