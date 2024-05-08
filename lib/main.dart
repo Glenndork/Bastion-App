@@ -1,7 +1,5 @@
 import 'package:bastion/pages/HomePage.dart';
 import 'package:flutter/material.dart';
-import 'package:bastion/pages/LandingPage.dart';
-
 void main() {
   runApp(const MyApp());
 }

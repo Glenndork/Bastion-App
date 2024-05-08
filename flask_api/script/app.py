@@ -130,7 +130,7 @@ def predict_malware(file_path, label_csv):
     extracted_features = extract_features(file_path)
     if extracted_features:
         # Convert extracted features to numpy array
-        features = np.array([extracted_features])
+        features = np.array([extracted_features]) 
 
         # Load pre-trained SVM model for malware detection
         model_path = 'flask_api/models/version1.pkl'
