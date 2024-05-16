@@ -32,15 +32,15 @@ dependencies:
     sdk: flutter
   file_picker: ^4.0.0
   loading_animation_widget:
-
+  path_provider: ^2.0.11
   cupertino_icons: ^1.0.6
-  http: ^1.2.1
+  http: ^0.13.3
   shared_preferences: ^2.2.3
+  synchronized: ^3.0.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
   # activated in the `analysis_options.yaml` file located at the root of your
@@ -55,6 +55,8 @@ dev_dependencies:
 flutter:
   assets:
     - assets/logo/
+    - assets/flask_api/script/app2.py
+    - assets/flask_api/models/version1.pkl
   fonts:
     - family: Black Ops One
       fonts:

@@ -3,23 +3,29 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
-import 'dart:io' show Directory, FileSystemCreateEvent, FileSystemEvent, Platform, Process;
+import 'package:path_provider/path_provider.dart';
+import 'dart:io' show Directory, File, FileMode, FileSystemCreateEvent, FileSystemEvent, Platform, Process;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http; // Import http package
+import 'package:synchronized/synchronized.dart';
 
-class HomePage extends StatelessWidget {
+class BaseApp extends StatelessWidget {
+  const BaseApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color.fromARGB(98, 90, 86, 86),
       body: Container(
-        child: ThreeColumnsRow(),
+        child: const ThreeColumnsRow(),
       ),
     );
   }
 }
 
 class ThreeColumnsRow extends StatefulWidget {
+  const ThreeColumnsRow({super.key});
+
   @override
   _ThreeColumnsRowState createState() => _ThreeColumnsRowState();
 }
@@ -29,17 +35,44 @@ class _ThreeColumnsRowState extends State<ThreeColumnsRow> {
   StreamSubscription<FileSystemEvent>? _monitorSubscription;
   final TextEditingController phoneController = TextEditingController();
   String phoneNumberError = '';
+  bool _isMonitoring = false; // State variable for monitoring status
+  late File _logFile;
+  String? _currentFileBeingScanned; // State variable for the current file being scanned
+  final _logLock = Lock();
 
   @override
   void initState() {
     super.initState();
-    _loadMonitoredDirectory(); // Load the monitored directory on initialization
+    _initializeLogFile();
   }
 
   @override
   void dispose() {
     _monitorSubscription?.cancel(); // Cancel subscription when disposing
     super.dispose();
+  }
+
+  Future<void> _initializeLogFile() async {
+    final directory = await getApplicationDocumentsDirectory();
+    _logFile = File('${directory.path}/logfile.txt');
+    
+    print('Log file path: ${_logFile.path}'); // Print path for debugging
+    
+    if (!(await _logFile.exists())) {
+      await _logFile.create();
+    }
+  }
+
+  Future<void> _writeToLogFile(String message) async {
+    final timestamp = DateTime.now().toIso8601String();
+    final logMessage = '$timestamp: $message\n';
+    try {
+      await _logLock.synchronized(() async {
+        await _logFile.writeAsString(logMessage, mode: FileMode.append, flush: true);
+      });
+    } catch (e) {
+      print('Error writing to log file: $e');
+    }
   }
 
   void _loadMonitoredDirectory() async {
@@ -52,74 +85,134 @@ class _ThreeColumnsRowState extends State<ThreeColumnsRow> {
   }
 
   void _startMonitoring(String directoryPath) {
-    _monitorSubscription?.cancel(); // Cancel any existing subscription
-
     final directory = Directory(directoryPath);
     if (!directory.existsSync()) {
       print('Directory does not exist: $directoryPath');
       return;
     }
 
+    setState(() {
+      _isMonitoring = true; // Set monitoring status to true
+    });
+
     _monitorSubscription = directory.watch(recursive: true).listen(
       (FileSystemEvent event) {
         if (event is FileSystemCreateEvent) {
-          print('New file detected: ${event.path}'); // Log the file detection
-          _scanFile(event.path); // Scan the new file
+          print('New file detected: ${event.path}');
+          _scanFile(event.path);
         }
       },
-      onError: (error) => print('Error monitoring directory: $error'),
-      onDone: () => print('Monitoring ended.'),
+      onError: (error) {
+        print('Error monitoring directory: $error');
+        setState(() {
+          _isMonitoring = false; // Set monitoring status to false on error
+        });
+      },
+      onDone: () {
+        print('Monitoring ended.');
+        setState(() {
+          _isMonitoring = false; // Set monitoring status to false when done
+        });
+      },
     );
   }
 
-  void _scanFile(String filePath) async {
-    final pythonScript = 'flask_api/script/app.py'; // Path to your Python script
+void _scanFile(String filePath) async {
+  final pythonAssetPath = 'assets/flask_api/script/app2.py';
+  final modelAssetPath = 'assets/flask_api/models/version1.pkl';
 
-    try {
-      print('Scanning: $filePath'); // Debug message to indicate scanning
-      final result = await Process.run('python3', [pythonScript, filePath]);
+  try {
+    print('Scanning: $filePath'); // Debug message to indicate scanning
+    setState(() {
+      _currentFileBeingScanned = filePath; // Update the state with the current file being scanned
+    });
 
-      if (result.exitCode == 0) {
+    // Load the Python script from assets
+    final pythonScript = await rootBundle.loadString(pythonAssetPath);
 
-        
-        final output = result.stdout.toString().trim(); // Get script output
+    // Load the model file from assets
+    final modelData = await rootBundle.load(modelAssetPath);
+    final modelBytes = modelData.buffer.asUint8List();
 
-        print('File scanned successfully: $output');
+    // Save the script to a temporary file
+    final tempDir = await getTemporaryDirectory();
+    final tempScriptPath = '${tempDir.path}/app2.py';
+    final tempScriptFile = File(tempScriptPath);
+    await tempScriptFile.writeAsString(pythonScript);
 
-        if (output == "Malware") {
-          // Send SMS if malware is detected
-          final message = "Alert! Malware has been detected in: $filePath"; // SMS content
-          _showMalwareAlert(context, filePath); // Show the alert dialog
-          // _sendSmsNotification(message);
-        }
-      } else {
-        print('File scan failed: ${result.stderr}'); // Handle failure
-      }
-    } catch (e) {
-      print('Error scanning file: $e'); // Handle exceptions
+    // Save the model to a temporary file
+    final tempModelPath = '${tempDir.path}/version1.pkl';
+    final tempModelFile = File(tempModelPath);
+    await tempModelFile.writeAsBytes(modelBytes);
+
+    // Check if the script and model were saved successfully
+    if (!await tempScriptFile.exists() || !await tempModelFile.exists()) {
+      print('Failed to save Python script or model to temporary directory');
+      await _writeToLogFile('Failed to save Python script or model to temporary directory');
+      return;
     }
-  }
 
-  void _showMalwareAlert(BuildContext context, String filePath) {
+    print('Python script saved to temporary path: $tempScriptPath'); // Log the script path
+    print('Model saved to temporary path: $tempModelPath'); // Log the model path
+
+    // Execute the Python script with the file path and model path as arguments
+    final result = await Process.run('python3', [tempScriptPath, filePath, tempModelPath]);
+
+    // Check the exit code
+    if (result.exitCode == 0) {
+      print('100');
+      final output = result.stdout.toString().trim(); // Get script output
+      print('$output');
+      await _writeToLogFile('Scanned $filePath: $output'); // Log the scan result
+
+      if (output.contains("Malware")) {
+        // Malware detected actions
+        final message = "Alert! Malware has been detected in: $filePath"; // SMS content
+        await _writeToLogFile(message); // Log the malware detection
+        _showMalwareAlert(context, filePath, output);
+        _sendSmsNotification(message);
+      }
+    } else {
+      print('File scan failed: ${result.stderr}'); // Handle failure
+      await _writeToLogFile('Failed to scan $filePath: ${result.stderr}'); // Log the failure
+    }
+  } catch (e) {
+    print('Error scanning file: $e'); // Handle exceptions
+    await _writeToLogFile('Error scanning $filePath: $e'); // Log the error
+  } finally {
+    setState(() {
+      _currentFileBeingScanned = null; // Reset the current file being scanned after scanning
+    });
+  }
+}
+
+  void _showMalwareAlert(BuildContext context, String filePath, String output) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text("Malware Detected"),
-          content: Text("Malware has been detected in the following file: $filePath"),
+          title: const Text("Malware Detected"),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text("Malware has been detected in the following file: $filePath"),
+              const SizedBox(height: 10),
+              Text(output, style: const TextStyle(color: Colors.red)),
+            ],
+          ),
           actions: [
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop(); // Close the dialog
               },
-              child: Text("OK"),
+              child: const Text("OK"),
             ),
             ElevatedButton(
               onPressed: () {
                 _openContainingFolder(filePath); // Open the containing directory
                 Navigator.of(context).pop(); // Close the dialog after action
               },
-              child: Text("Open Directory"),
+              child: const Text("Open Directory"),
             ),
           ],
         );
@@ -138,11 +231,24 @@ class _ThreeColumnsRowState extends State<ThreeColumnsRow> {
     }
   }
 
+  void _scanDirectory(String directoryPath) async {
+    final directory = Directory(directoryPath);
+    if (!directory.existsSync()) {
+      print('Directory does not exist: $directoryPath');
+      return;
+    }
+
+    await for (final entity in directory.list(recursive: true)) {
+      if (entity is File && entity.path.toLowerCase().endsWith('.exe')) {
+        _scanFile(entity.path); // Scan the exe file
+      }
+    }
+  }
+
   Future<void> _sendSmsNotification(String message) async {
-    print('300');
-    final apiKey = "41b35041";
-    final apiSecret = "8KleUiYbk2S77WUp";
-    final from = "Bastion"; // Sender name or number
+    const apiKey = "176f54f4";
+    const apiSecret = "voFzIJZIsxFXV5vc";
+    const from = "Bastion"; // Sender name or number
     final to = phoneController.text; // Recipient's phone number
 
     final response = await http.post(
@@ -158,9 +264,10 @@ class _ThreeColumnsRowState extends State<ThreeColumnsRow> {
         "text": message,
       }),
     );
-
+    print("Sending SMS");
     if (response.statusCode == 200) {
-      print('400');
+      print("Processing");
+
       final responseData = jsonDecode(response.body);
       final messageStatus = responseData["messages"][0]["status"];
 
@@ -174,23 +281,41 @@ class _ThreeColumnsRowState extends State<ThreeColumnsRow> {
     }
   }
 
+  void _openLogFile() async {
+    final directory = await getApplicationDocumentsDirectory();
+    final logFilePath = '${directory.path}/logfile.txt';
+    final logFile = File(logFilePath);
+
+    if (await logFile.exists()) {
+      if (Platform.isWindows) {
+        await Process.run('notepad.exe', [logFilePath]);
+      } else if (Platform.isMacOS) {
+        await Process.run('open', ['-a', 'TextEdit', logFilePath]);
+      } else if (Platform.isLinux) {
+        await Process.run('xdg-open', [logFilePath]);
+      }
+    } else {
+      print('Log file does not exist.');
+    }
+}
+
   void _showSettingsDialog(BuildContext context) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
           title: const Text("Configure Phone Number"),
-          content: Container(
+          content: SizedBox(
             width: 300,
-            height: 150,
+            height: 200, // Increase height to accommodate the new button
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                const SizedBox(height: 20),
                 const Text(
                   'Enter Phone Number',
                   style: TextStyle(fontSize: 15),
                 ),
-                
                 TextField(
                   controller: phoneController,
                   decoration: InputDecoration(
@@ -208,6 +333,11 @@ class _ThreeColumnsRowState extends State<ThreeColumnsRow> {
                       phoneNumberError = 'Phone number must start with 63';
                     }
                   },
+                ),
+                const SizedBox(height: 30),
+                ElevatedButton(
+                  onPressed: _openLogFile,
+                  child: const Text("See Logs"),
                 ),
               ],
             ),
@@ -229,6 +359,7 @@ class _ThreeColumnsRowState extends State<ThreeColumnsRow> {
       },
     );
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -277,8 +408,23 @@ class _ThreeColumnsRowState extends State<ThreeColumnsRow> {
                         color: Colors.white,
                       ),
                     ),
-                    const SizedBox(height: 10), // Add spacing between text and button
+                    const SizedBox(height: 30),
+                    if (_isMonitoring) ...[
+                      const CircularProgressIndicator(
+                        color: Colors.white,
+                      ),
+                      const SizedBox(height: 10),
+                      if (_currentFileBeingScanned != null)
+                        Text(
+                          'Scanning: $_currentFileBeingScanned',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            color: Colors.white,
+                          ),
+                        ),
+                    ],
                   ],
+                  const SizedBox(height: 30),
                   ElevatedButton(
                     onPressed: _selectDirectory, // Select a folder to monitor
                     style: ButtonStyle(
@@ -291,7 +437,7 @@ class _ThreeColumnsRowState extends State<ThreeColumnsRow> {
                       minimumSize: MaterialStateProperty.all<Size>(const Size(250, 70)),
                     ),
                     child: const Text(
-                      'Select Folder',
+                      'Select Directory',
                       style: TextStyle(
                         color: Colors.black,
                         fontSize: 24,
@@ -321,7 +467,7 @@ class _ThreeColumnsRowState extends State<ThreeColumnsRow> {
     );
   }
 
-    Future<void> _selectDirectory() async {
+  void _selectDirectory() async {
     final selectedPath = await FilePicker.platform.getDirectoryPath();
     if (selectedPath != null) {
       setState(() {
@@ -329,11 +475,11 @@ class _ThreeColumnsRowState extends State<ThreeColumnsRow> {
         print('Directory selected: $selectedPath.');
       });
       _startMonitoring(selectedPath); // Start monitoring the directory
+      _scanDirectory(selectedPath); // Scan all exe files in the directory
     } else {
       print('Directory selection canceled.');
     }
   }
-
 }
 
-void main() => runApp(MaterialApp(home: HomePage()));
+void main() => runApp(const MaterialApp(home: BaseApp()));

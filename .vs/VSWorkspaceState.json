@@ -1,0 +1,14 @@
+{
+  "ExpandedNodes": [
+    "",
+    "\\build",
+    "\\build\\windows",
+    "\\build\\windows\\x64",
+    "\\build\\windows\\x64\\runner",
+    "\\build\\windows\\x64\\runner\\Debug",
+    "\\lib",
+    "\\lib\\pages"
+  ],
+  "SelectedNode": "\\build\\windows\\x64\\runner\\Debug\\bastion.exe",
+  "PreviewInSolutionExplorer": false
+}
