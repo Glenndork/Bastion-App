@@ -3,9 +3,18 @@
 A Desktop-based Malware Detection Application using Support Vector Machines
 
 - Features
-1. Malware Scanning - it scans the exe file in the system and then extracts its features for checking if it's malware or benign.
-2. SMS Notification - if malware is detected, it sends an sms notification along with its file path that malware is detected. (Needs WIFI to work)
+1. Malware Scanning -this feature allows users to set a directory for
+malware scanning. This process leverages the trained model. When a
+directory is set, the application scans the previous files found in the
+directory. When a new file is detected, the application scans it, extracts its
+features, and feeds it to the trained model. Then, the trained model predicts
+if it is malware or not.
 
+2. SMS Notification - – the researchers integrate Vonage Api; this API sends an SMS
+alert when malware is detected.
+
+3. Scan History – the researchers implemented a history of all the files
+scanned by the application. A button can be clicked to access the log.
 ## Developers
 
 Karl Francis S. Catolico
